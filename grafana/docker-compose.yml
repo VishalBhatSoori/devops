@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    restart: always
+    ports:
+      - 3000:3000
+    networks:
+      - grafana-net
+    volumes:
+      - grafana-volume:/var/lib/grafana
+
+  graphite:
+    image: graphiteapp/graphite-statsd
+    container_name: graphite
+    restart: always
+    networks:
+      - grafana-net
+
+networks:
+  grafana-net:
+    driver: bridge
+
+volumes:
+  grafana-volume:
+    external: true

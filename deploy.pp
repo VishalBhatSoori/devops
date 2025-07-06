@@ -1,33 +1,18 @@
 # Install dependencies
-package { 'openjdk-11-jdk':
+package { ['openjdk-11-jdk', 'maven', 'git']:
   ensure => installed,
 }
 
-package { 'maven':
-  ensure => installed,
-}
-
-package { 'git':
-  ensure => installed,
-}
-
-# Clone the repository
+# Clone the repository if not already cloned
 exec { 'clone_coreproject_repo':
   command => 'git clone https://github.com/VishalShekha/devops.git /opt/devops',
-  creates => '/opt/devops',  
+  creates => '/opt/devops',
   path    => ['/usr/bin', '/usr/local/bin'],
   cwd     => '/opt',
 }
 
-# Ensure directories exist
-file { '/opt/devops/logs':
-  ensure => directory,
-  owner  => 'root',
-  group  => 'root',
-  mode   => '0755',
-}
-
-file { '/opt/devops/deployed':
+# Ensure deployment directories exist
+file { ['/opt/devops/logs', '/opt/devops/deployed']:
   ensure => directory,
   owner  => 'root',
   group  => 'root',
@@ -40,52 +25,52 @@ exec { 'maven_build':
   cwd     => '/opt/devops',
   path    => ['/usr/bin', '/usr/local/bin'],
   unless  => 'test -f /opt/devops/target/coreproject-0.0.1-SNAPSHOT.jar',
+  require => Exec['clone_coreproject_repo'],
 }
 
-# Deploy the JAR file
-file { '/opt/devops/deployed/coreproject.jar':
-  ensure  => 'present',
-  source  => '/opt/devops/target/coreproject-0.0.1-SNAPSHOT.jar',
+# Copy the built JAR to deployed directory
+exec { 'copy_jar':
+  command => 'cp /opt/devops/target/coreproject-0.0.1-SNAPSHOT.jar /opt/devops/deployed/coreproject.jar',
+  creates => '/opt/devops/deployed/coreproject.jar',
   require => Exec['maven_build'],
 }
 
-# Start the Spring Boot application
-exec { 'start_spring_boot':
-  command => 'java -jar /opt/devops/deployed/coreproject.jar > /opt/devops/logs/application.log 2>&1 &',
-  cwd     => '/opt/devops',
-  path    => ['/usr/bin', '/usr/local/bin'],
-  require => File['/opt/devops/deployed/coreproject.jar'],
-  creates => '/opt/devops/logs/application.log',
-  unless  => 'test -f /opt/devops/logs/application.log',
-}
-
-# Create systemd service
+# Create systemd service unit file
 file { '/etc/systemd/system/coreproject.service':
   ensure  => file,
-  content => '
-[Unit]
-Description=CoreProject Spring Boot Application
-After=network.target
+  content => @("EOF"),
+    [Unit]
+    Description=CoreProject Spring Boot Application
+    After=network.target
 
-[Service]
-ExecStart=/usr/bin/java -jar /opt/devops/deployed/coreproject.jar --server.port=8081
-WorkingDirectory=/opt/devops
-StandardOutput=append:/opt/devops/logs/application.log
-StandardError=append:/opt/devops/logs/application.log
-Restart=always
-User=root
-Group=root
+    [Service]
+    ExecStart=/usr/bin/java -jar /opt/devops/deployed/coreproject.jar --server.port=8081
+    WorkingDirectory=/opt/devops
+    StandardOutput=append:/opt/devops/logs/application.log
+    StandardError=append:/opt/devops/logs/application.log
+    Restart=always
+    User=root
+    Group=root
+    SuccessExitStatus=143
 
-[Install]
-WantedBy=multi-user.target
-',
+    [Install]
+    WantedBy=multi-user.target
+    | EOF
   mode    => '0644',
+  require => Exec['copy_jar'],
 }
 
-# Manage the service
+# Reload systemd when the service unit changes
+exec { 'daemon_reload':
+  command     => '/bin/systemctl daemon-reload',
+  refreshonly => true,
+  subscribe   => File['/etc/systemd/system/coreproject.service'],
+}
+
+# Ensure the service is running and enabled
 service { 'coreproject':
-  ensure     => running,
-  enable     => true,
-  require    => [File['/etc/systemd/system/coreproject.service'], File['/opt/devops/deployed/coreproject.jar']],
-  subscribe  => File['/etc/systemd/system/coreproject.service'],
+  ensure    => running,
+  enable    => true,
+  require   => [Exec['daemon_reload'], Exec['copy_jar']],
+  subscribe => File['/etc/systemd/system/coreproject.service'],
 }
