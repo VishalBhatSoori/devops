@@ -1,9 +1,7 @@
-# Install dependencies
 package { ['openjdk-11-jdk', 'maven', 'git']:
   ensure => installed,
 }
 
-# Clone the repository if not already cloned
 exec { 'clone_coreproject_repo':
   command => 'git clone https://github.com/VishalShekha/devops.git /opt/devops',
   creates => '/opt/devops',
@@ -11,7 +9,6 @@ exec { 'clone_coreproject_repo':
   cwd     => '/opt',
 }
 
-# Ensure deployment directories exist
 file { ['/opt/devops/logs', '/opt/devops/deployed']:
   ensure => directory,
   owner  => 'root',
@@ -19,7 +16,6 @@ file { ['/opt/devops/logs', '/opt/devops/deployed']:
   mode   => '0755',
 }
 
-# Build the project with Maven
 exec { 'maven_build':
   command => 'mvn clean install',
   cwd     => '/opt/devops',
@@ -28,14 +24,13 @@ exec { 'maven_build':
   require => Exec['clone_coreproject_repo'],
 }
 
-# Copy the built JAR to deployed directory
 exec { 'copy_jar':
   command => 'cp /opt/devops/target/coreproject-0.0.1-SNAPSHOT.jar /opt/devops/deployed/coreproject.jar',
   creates => '/opt/devops/deployed/coreproject.jar',
+  path    => ['/bin', '/usr/bin', '/usr/local/bin'],
   require => Exec['maven_build'],
 }
 
-# Create systemd service unit file
 file { '/etc/systemd/system/coreproject.service':
   ensure  => file,
   content => @("EOF"),
@@ -60,14 +55,12 @@ file { '/etc/systemd/system/coreproject.service':
   require => Exec['copy_jar'],
 }
 
-# Reload systemd when the service unit changes
 exec { 'daemon_reload':
   command     => '/bin/systemctl daemon-reload',
   refreshonly => true,
   subscribe   => File['/etc/systemd/system/coreproject.service'],
 }
 
-# Ensure the service is running and enabled
 service { 'coreproject':
   ensure    => running,
   enable    => true,
