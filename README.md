@@ -106,4 +106,4 @@ This is an entry-level project created for learning purposes. Contributions are 
 
 ## Acknowledgments
 - Thanks to the open-source community for providing tools like Spring Boot, Docker, Jenkins, Puppet, Grafana, and Graphite.
-- Inspired by DevOps best practices and tutorials for building CI/CD pipelines.
+
